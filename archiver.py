@@ -9,7 +9,7 @@ try:
 except:
 	print("No settings file created. Aborting.")
 	sys.exit(1)
-	
+
 
 class Archiver:
 	''' Copies specified folders for a list of hosts to a target folder
@@ -21,7 +21,7 @@ class Archiver:
 		self.sources = settings.sources
 		self.verbose = False
 		self.errors = False
-		self.initProcessInfo()
+		self.processInfo = {}
 
 		self.logFile = None
 		self.logFileError = None
@@ -32,17 +32,18 @@ class Archiver:
 
 	def usage(self):
 		print("usage")
-	
 
-	def initProcessInfo(self):
-		self.processInfo = {}
+
+	def initProcessInfo(self, namespace):
 		for source in self.sources:
-			self.processInfo.update({
+			self.processInfo.update({namespace:
+				{
 					source['host']: {
 						'returncode': None,
 						'stdout': '',
 						'stderr': ''
 					}
+				}
 			})
 
 
@@ -66,7 +67,9 @@ class Archiver:
 		'''
 		# command template
 		command = 'rsync -avz {}@{}:{}/ {}'
+		namespace = 'archive'
 		procs = []
+		self.initProcessInfo(namespace)
 		for source in self.sources:
 			print("Archiving {}".format(source['host']))
 			builtFolder = self.buildTargetFolder(source['host'], source['folder'])
@@ -79,36 +82,33 @@ class Archiver:
 			for p in procs:
 				server, proc = p['host'], p['proc']
 				if proc.poll() is not None:
-					self.processInfo[server]['stdout'] = proc.stdout.read()	
-					self.processInfo[server]['stderr'] = proc.stderr.read()	
-					self.processInfo[server]['returncode'] = proc.returncode
+					self.processInfo[namespace][server]['stdout'] = proc.stdout.read()
+					self.processInfo[namespace][server]['stderr'] = proc.stderr.read()
+					self.processInfo[namespace][server]['returncode'] = proc.returncode
 					if self.verbose:
-						print(self.processInfo[server]['stdout'])
-					if proc.returncode > 0 or len(self.processInfo[server]['stderr']) > 0:
+						print(self.processInfo[namespace][server]['stdout'])
+					if proc.returncode > 0 or len(self.processInfo[namespace][server]['stderr']) > 0:
 						self.errors = True
-						print(self.processInfo[server]['stderr'])
+						print(self.processInfo[namespace][server]['stderr'])
 					# Delete finished process
 					procs.remove(p)
 
-		self.logProcessInfo()
+		self.logProcessInfo(namespace)
 
 		if self.errors:
 			sys.exit(3)
 
 
-	def logProcessInfo(self):
+	def logProcessInfo(self, namespace):
 		# Format: 'date - host - line separator - output'
 		logFormat = '{} - {}\n==============================\n{}'
 		if settings.logging:
-			for server, result in self.processInfo.items():
-				if len(self.processInfo[server]['stdout']) > 0:
-					self.logFile.write(logFormat.format(datetime.now(), server, self.processInfo[server]['stdout']))
-				if len(self.processInfo[server]['stderr']) > 0:
-					self.logFileError.write(logFormat.format(datetime.now(), server, self.processInfo[server]['stderr']))
-		# Reset data
-		self.initProcessInfo()
-		sys.exit(3)
-		
+			for server, result in self.processInfo[namespace].items():
+				if len(self.processInfo[namespace][server]['stdout']) > 0:
+					self.logFile.write(logFormat.format(datetime.now(), server, self.processInfo[namespace][server]['stdout']))
+				if len(self.processInfo[namespace][server]['stderr']) > 0:
+					self.logFileError.write(logFormat.format(datetime.now(), server, self.processInfo[namespace][server]['stderr']))
+
 
 	def clean(self):
 		''' Clean all copied files from sources, one source at a time
@@ -116,6 +116,8 @@ class Archiver:
 		# command template
 		command = 'ssh {}@{} find {} -type f -name \"*.{}\" -mmin +{} -exec rm {{}} \;'
 		#command = 'ssh {}@{} find {} -type f -name \"*.{}\" -mtime +{} -exec rm {{}} \;'
+		namespace = 'clean'
+		self.initProcessInfo(namespace)
 		procs = []
 		for source in self.sources:
 			print("Cleaning {}".format(source['host']))
@@ -128,18 +130,18 @@ class Archiver:
 			for p in procs:
 				server, proc = p['host'], p['proc']
 				if proc.poll() is not None:
-					self.processInfo[server]['stdout'] = proc.stdout.read()	
-					self.processInfo[server]['stderr'] = proc.stderr.read()	
-					self.processInfo[server]['returncode'] = proc.returncode
+					self.processInfo[namespace][server]['stdout'] = proc.stdout.read()
+					self.processInfo[namespace][server]['stderr'] = proc.stderr.read()
+					self.processInfo[namespace][server]['returncode'] = proc.returncode
 					if self.verbose:
-						print(self.processInfo[server]['stdout'])
-					if proc.returncode > 0 or len(self.processInfo[server]['stderr']) > 0:
+						print(self.processInfo[namespace][server]['stdout'])
+					if proc.returncode > 0 or len(self.processInfo[namespace][server]['stderr']) > 0:
 						self.errors = True
-						print(self.processInfo[server]['stderr'])
+						print(self.processInfo[namespace][server]['stderr'])
 					# Delete finished process
 					procs.remove(p)
 
-		self.logProcessInfo()
+		self.logProcessInfo(namespace)
 
 		if self.errors:
 			sys.exit(3)
