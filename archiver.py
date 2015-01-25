@@ -138,6 +138,84 @@ class Archiver:
 					self.logFileError.write(logFormat.format(datetime.now(), server, self.processInfo[namespace][server]['stderr']))
 
 
+	def verifyChecksums(self):
+		''' Read source MD5SUMS and destination MD5SUMS to determine
+			if transfer was successfully finished.
+		'''
+		print("WIP finished WIP")
+		sys.exit(5)
+
+		# command template
+		localCommand = "find {} -type f -name \"\*.{}\" -exec md5sum {{}} \;"
+		awkCommand = "awk '{{print $1}}'"
+		sortCommand = "sort"
+		md5sumCommand = "md5sum"
+		localNamespace = 'localchecksum'
+		self.initProcessInfo(localNamespace)
+		procs = []
+		for source in self.sources:
+			print("Verifying {}".format(source['host']))
+			builtFolder = self.buildTargetFolder(source['host'], source['folder'])
+			cmd = localCommand.format(builtFolder, source['extension'])
+			procFind = subprocess.Popen(cmd.split(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+			procAwk = subprocess.Popen(awkCommand.split(), stdin = procFind.stdout, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+			procSort = subprocess.Popen(sortCommand.split(), stdin = procAwk.stdout, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+			proc = subprocess.Popen(md5sumCommand.split(), stdin = procSort.stdout, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+			procs.append({'host': source['host'], 'proc': proc})
+
+		while procs:
+			for p in procs:
+				server, proc = p['host'], p['proc']
+				if proc.poll() is not None:
+					self.processInfo[localNamespace][server]['stdout'] = proc.stdout.read()
+					self.processInfo[localNamespace][server]['stderr'] = proc.stderr.read()
+					self.processInfo[localNamespace][server]['returncode'] = proc.returncode
+					if self.verbose:
+						print(self.processInfo[localNamespace][server]['stdout'])
+					if proc.returncode > 0 or len(self.processInfo[localNamespace][server]['stderr']) > 0:
+						self.errors = True
+						print(self.processInfo[localNamespace][server]['stderr'])
+					# Delete finished process
+					procs.remove(p)
+
+		self.logProcessInfo(localNamespace)
+
+		remoteCommand = 'ssh {}@{} find {} -type f -name \"*.{}\" -exec md5sum {{}} \; | awk \'{{print $1}}\' | sort | md5sum'
+		remoteNamespace = 'remotechecksum'
+		self.initProcessInfo(remoteNamespace)
+		procs = []
+		for source in self.sources:
+			print("Verifying {}".format(source['host']))
+			builtFolder = self.buildTargetFolder(source['host'], source['folder'])
+			cmd = remoteCommand.format(source['user'], source['host'], source['folder'], source['extension'])
+			print(cmd)
+			proc = subprocess.Popen(cmd.split(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+			procs.append({'host': source['host'], 'proc': proc})
+
+		while procs:
+			for p in procs:
+				server, proc = p['host'], p['proc']
+				if proc.poll() is not None:
+					self.processInfo[remoteNamespace][server]['stdout'] = proc.stdout.read()
+					self.processInfo[remoteNamespace][server]['stderr'] = proc.stderr.read()
+					self.processInfo[remoteNamespace][server]['returncode'] = proc.returncode
+					if self.verbose:
+						print(self.processInfo[remoteNamespace][server]['stdout'])
+					if proc.returncode > 0 or len(self.processInfo[remoteNamespace][server]['stderr']) > 0:
+						self.errors = True
+						print(self.processInfo[remoteNamespace][server]['stderr'])
+					# Delete finished process
+					procs.remove(p)
+
+		self.logProcessInfo(remoteNamespace)
+
+		for source in self.sources:
+			if self.processInfo[localNamespace][server]['stdout'] != self.processInfo[remoteNamespace][server]['stdout']:
+				print("Checksum error on host {}".format(server))
+				print(self.processInfo[localNamespace][server]['stdout'], self.processInfo[remoteNamespace][server]['stdout'])
+				sys.exit(4)
+
+
 	def clean(self):
 		''' Clean all copied files from sources, one source at a time
 		'''
