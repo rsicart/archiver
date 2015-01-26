@@ -142,25 +142,16 @@ class Archiver:
 		''' Read source MD5SUMS and destination MD5SUMS to determine
 			if transfer was successfully finished.
 		'''
-		print("WIP finished WIP")
-		sys.exit(5)
-
 		# command template
-		localCommand = "find {} -type f -name \"\*.{}\" -exec md5sum {{}} \;"
-		awkCommand = "awk '{{print $1}}'"
-		sortCommand = "sort"
-		md5sumCommand = "md5sum"
+		localCommand = "find {} -type f -name *.{} -exec md5sum {{}} ;"
 		localNamespace = 'localchecksum'
 		self.initProcessInfo(localNamespace)
 		procs = []
 		for source in self.sources:
-			print("Verifying {}".format(source['host']))
+			print("Verifying local {}".format(source['host']))
 			builtFolder = self.buildTargetFolder(source['host'], source['folder'])
 			cmd = localCommand.format(builtFolder, source['extension'])
-			procFind = subprocess.Popen(cmd.split(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-			procAwk = subprocess.Popen(awkCommand.split(), stdin = procFind.stdout, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-			procSort = subprocess.Popen(sortCommand.split(), stdin = procAwk.stdout, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-			proc = subprocess.Popen(md5sumCommand.split(), stdin = procSort.stdout, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+			proc = subprocess.Popen(cmd.split(), stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 			procs.append({'host': source['host'], 'proc': proc})
 
 		while procs:
@@ -180,12 +171,12 @@ class Archiver:
 
 		self.logProcessInfo(localNamespace)
 
-		remoteCommand = 'ssh {}@{} find {} -type f -name \"*.{}\" -exec md5sum {{}} \; | awk \'{{print $1}}\' | sort | md5sum'
+		remoteCommand = 'ssh {}@{} find {} -type f -name \"*.{}\" -exec md5sum {{}} \;'
 		remoteNamespace = 'remotechecksum'
 		self.initProcessInfo(remoteNamespace)
 		procs = []
 		for source in self.sources:
-			print("Verifying {}".format(source['host']))
+			print("Verifying remote {}".format(source['host']))
 			builtFolder = self.buildTargetFolder(source['host'], source['folder'])
 			cmd = remoteCommand.format(source['user'], source['host'], source['folder'], source['extension'])
 			print(cmd)
@@ -210,10 +201,31 @@ class Archiver:
 		self.logProcessInfo(remoteNamespace)
 
 		for source in self.sources:
-			if self.processInfo[localNamespace][server]['stdout'] != self.processInfo[remoteNamespace][server]['stdout']:
+			#print(self.processInfo[localNamespace][server]['stdout'], self.processInfo[remoteNamespace][server]['stdout'])
+			if not self.compareMd5sums(self.processInfo[localNamespace][server]['stdout'], self.processInfo[remoteNamespace][server]['stdout']):
 				print("Checksum error on host {}".format(server))
-				print(self.processInfo[localNamespace][server]['stdout'], self.processInfo[remoteNamespace][server]['stdout'])
 				sys.exit(4)
+
+
+	def getHashes(self, stdout):
+		''' Returns a list of hashes extracted from a process output
+			formated as 'md5sum_hash  filename'
+		'''
+		stdout = stdout.decode()
+		a = stdout.split('\n')
+		result = []
+		for line in a:
+			list = line.split('  ')
+			result.append(list[0])
+		return result
+
+
+	def compareMd5sums(self, stdoutA, stdoutB):
+		''' Compares two process outputs and returns a boolean
+		'''
+		hashesA = self.getHashes(stdoutA)
+		hashesB = self.getHashes(stdoutB)
+		return hashesA == hashesB
 
 
 	def clean(self):
