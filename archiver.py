@@ -2,6 +2,7 @@
 
 import subprocess
 import sys, os, errno
+import getopt
 from datetime import date, datetime
 
 try:
@@ -16,7 +17,8 @@ class Archiver:
         and cleans specified extension files from sources after.
     '''
 
-    def __init__(self):
+    def __init__(self, arguments):
+        self.setupArguments(arguments)
         self.targetFolder = settings.targetFolder
         self.sources = settings.sources
         self.verbose = False
@@ -31,7 +33,7 @@ class Archiver:
 
 
     def usage(self):
-        print("./archive.py")
+        print("./archive.py --run [--clean]")
 
 
     def initProcessInfo(self, namespace):
@@ -196,6 +198,9 @@ class Archiver:
     def clean(self):
         ''' Clean all copied files from sources, one source at a time
         '''
+        if not self.actions['clean']:
+            sys.exit(0)
+
         if self.errors:
             print("Won't execute *clean* because of previous errors. Exiting.")
             sys.exit(7)
@@ -208,10 +213,40 @@ class Archiver:
     def run(self):
         archiver.archive()
         archiver.verifyChecksums()
-        #archiver.clean()
+        archiver.clean()
+
+
+    def setupArguments(self, arguments):
+        try:
+            opts, args = getopt.getopt(arguments, "", ["help", "clean", "run"])
+        except getopt.GetoptError:
+            self.usage()
+            sys.exit(2)
+
+        self.actions = {
+            'clean': False,
+            'run': False,
+        }
+
+        ''' Parse script arguments
+        '''
+        for opt, arg in opts:
+            if opt in ('-h', "--help"):
+                self.usage()
+                sys.exit(1)
+            elif opt in ('--clean'):
+                self.actions['clean'] = True
+            elif opt in ('--run'):
+                self.actions['run'] = True
+
+        # --run protection
+        if not self.actions['run']:
+            self.usage()
+            sys.exit(1)
+
 
 
 
 if __name__ == '__main__':
-    archiver = Archiver()
+    archiver = Archiver(sys.argv[1:])
     archiver.run()
