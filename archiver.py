@@ -181,7 +181,7 @@ class Archiver:
         for line in a:
             list = line.split('  ')
             result.append(list[0])
-        return result
+        return result.sort()
 
 
     def compareHashes(self, stdoutA, stdoutB):
