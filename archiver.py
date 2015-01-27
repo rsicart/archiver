@@ -146,6 +146,19 @@ class Archiver:
                     self.logFileError.write(logFormat.format(datetime.now(), server, self.processInfo[namespace][server]['stderr']))
 
 
+    def consoleLog(self, message, type='info'):
+        raise NotImplementedError('consoleLog is in WIP!')
+
+        if len(message) == 0:
+            return False
+
+        if type in ['warning', 'error']:
+            print('{}: {}'.format(type, message, *objs, file=sys.stderr))
+        else:
+            print('{}: {}'.format(type, message))
+        return True
+
+
     def verifyChecksums(self):
         ''' Read source and destination hash sums to determine
             if transfer was successfully finished.
