@@ -166,7 +166,8 @@ class Archiver:
         self.runProcs(namespace, procs)
 
         for source in self.sources:
-            if not self.compareHashes(self.processInfo[localNamespace][source['host']]['stdout'], self.processInfo[remoteNamespace][source['host']]['stdout']):
+            localFolder = self.buildTargetFolder(source['host'], source['folder'])
+            if not self.compareHashes(source, self.processInfo[localNamespace][source['host']]['stdout'], self.processInfo[remoteNamespace][source['host']]['stdout']):
                 print("Checksum error on host {}".format(source['host']))
                 sys.exit(5)
 
@@ -177,22 +178,34 @@ class Archiver:
         '''
         stdout = stdout.decode()
         a = stdout.split('\n')
-        result = []
+        result = {}
         for line in a:
             list = line.split('  ')
-            result.append(list[0])
-        return result.sort()
+            if len(list[0]) > 0:
+                result.update({list[0]: list[1]})
+        return result
 
 
-    def compareHashes(self, stdoutA, stdoutB):
+    def compareHashes(self, source, stdoutLocal, stdoutRemote):
         ''' Compares two process outputs and returns a boolean
         '''
-        if len(stdoutA) == 0 or len(stdoutB) == 0:
+        if len(stdoutLocal) == 0 or len(stdoutRemote) == 0:
             return False
 
-        hashesA = self.getHashes(stdoutA)
-        hashesB = self.getHashes(stdoutB)
-        return hashesA == hashesB
+        # local files are archived in self.targetFolder/host. See @self.buildTargetFolder
+        localFolder = '{}/{}'.format(self.targetFolder, source['host'])
+        hashesLocal = self.getHashes(stdoutLocal)
+        hashesRemote = self.getHashes(stdoutRemote)
+        for hash, file in hashesRemote.items():
+            # remote hash exists in local hashes
+            if hash not in hashesLocal:
+                print("Warning: remote hash {} not found in local hashes\n".format(hash))
+                return False
+            # remote hash related filename matches local hash filename
+            if hashesLocal[hash].replace(localFolder, '') != file:
+                print("Warning: remote filename for hash {} doesn't match local filename\n".format(hash))
+                return False
+        return True
 
 
     def clean(self):
