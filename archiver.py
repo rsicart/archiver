@@ -188,7 +188,7 @@ class Archiver:
         ''' Compares two process outputs and returns a boolean
         '''
         if len(stdoutA) == 0 or len(stdoutB) == 0:
-            return false
+            return False
 
         hashesA = self.getHashes(stdoutA)
         hashesB = self.getHashes(stdoutB)
