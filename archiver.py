@@ -4,6 +4,7 @@ import subprocess
 import sys, os, errno
 import getopt
 from datetime import date, datetime
+import hashlib
 
 try:
     import settings
@@ -155,11 +156,6 @@ class Archiver:
             print("Won't execute *checksum* verification because of previous errors. Exiting.")
             sys.exit(6)
 
-        # target folder (copied files)
-        name = namespace = localNamespace = 'localchecksum'
-        procs = self.buildCommands(namespace)
-        self.runProcs(namespace, procs)
-
         # source folder (original files)
         name = namespace = remoteNamespace = 'remotechecksum'
         procs = self.buildCommands(namespace)
@@ -167,7 +163,7 @@ class Archiver:
 
         for source in self.sources:
             localFolder = self.buildTargetFolder(source['host'], source['folder'])
-            if not self.compareHashes(source, self.processInfo[localNamespace][source['host']]['stdout'], self.processInfo[remoteNamespace][source['host']]['stdout']):
+            if not self.compareHashes(source, self.processInfo[remoteNamespace][source['host']]['stdout']):
                 print("Checksum error on host {}".format(source['host']))
                 sys.exit(5)
 
@@ -186,24 +182,37 @@ class Archiver:
         return result
 
 
-    def compareHashes(self, source, stdoutLocal, stdoutRemote):
-        ''' Compares two process outputs and returns a boolean
+    def calculateLocalHash(self, filename):
+        ''' Calculates a hash from a local file and returns it
         '''
-        if len(stdoutLocal) == 0 or len(stdoutRemote) == 0:
+        hash = hashlib.md5()
+        try:
+            file = open(filename, 'rb')
+            while True:
+                data = file.read(128) # as recommended in doc
+                if not data:
+                    break
+                hash.update(data)
+        except:
+            return False
+
+        return hash.hexdigest()
+
+
+    def compareHashes(self, source, stdoutRemote):
+        ''' Compares remote file hash sums with same local files hash sums and returns a boolean
+        '''
+        if len(stdoutRemote) == 0:
             return False
 
         # local files are archived in self.targetFolder/host. See @self.buildTargetFolder
         localFolder = '{}/{}'.format(self.targetFolder, source['host'])
-        hashesLocal = self.getHashes(stdoutLocal)
         hashesRemote = self.getHashes(stdoutRemote)
-        for hash, file in hashesRemote.items():
-            # remote hash exists in local hashes
-            if hash not in hashesLocal:
-                print("Warning: remote hash {} not found in local hashes\n".format(hash))
-                return False
-            # remote hash related filename matches local hash filename
-            if hashesLocal[hash].replace(localFolder, '') != file:
-                print("Warning: remote filename for hash {} doesn't match local filename\n".format(hash))
+        for hash, filename in hashesRemote.items():
+            # remote hash exists in local hashes and matches
+            localHash = self.calculateLocalHash(localFolder + filename)
+            if hash != localHash:
+                print("Warning: remote hash {} different from local hash {} for file {}\n".format(hash, localHash, filename))
                 return False
         return True
 
